@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Anoma Report Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Application Structure Plan: 
+        The SPA is structured with a main header, a tab-based navigation, and a content area that dynamically updates.
+        1. Header: Displays the main title of the report.
+        2. Navigation Tabs: "Overview", "Top 3 Applications", "20 More Ideas", "Strategy & Outlook". This allows users to jump to key areas of the report. This structure was chosen for its familiarity and ease of use, breaking down a dense report into manageable, thematic sections.
+        3. Content Sections:
+            - Overview: Combines Executive Summary and Anoma's Architectural Pillars (using accordions for pillars for progressive disclosure). User Flow: Start here for foundational understanding.
+            - Top 3 Applications: Details PriConFin, SkillNet Anoma, and PriDECom. Each app has its own sub-section with structured information (Problem, Overview, Leverage, Juvix, Interaction, Novelty, Revenue, PMF). User Flow: Deep dive into flagship concepts.
+            - 20 More Ideas: Presents the table of 20 applications with interactive sorting and filtering. Includes a bar chart for PMF visualization and a section for "Brief Elaboration on Selected Ideas (Ranks 3-7)". User Flow: Explore broader potential and compare ideas.
+            - Strategy & Outlook: Covers Strategic Considerations and the Conclusion. User Flow: Understand future directions and summary.
+        Key Interactions: Tab switching, accordion expansion, table sorting/filtering, chart hover tooltips.
+        Rationale: This multi-section, tabbed approach with interactive elements aims to make the rich content of the Anoma report more accessible and engaging than a static document, facilitating easier comprehension and exploration of complex topics.
+    -->
+    <!-- Visualization & Content Choices:
+        1.  Report Info: Executive Summary (Sec 1)
+            Goal: Inform, Introduce.
+            Viz/Presentation: Text block.
+            Interaction: None.
+            Justification: Provides initial context.
+            Library/Method: HTML.
+        2.  Report Info: Anoma's Architectural Pillars (Sec 2)
+            Goal: Inform, Explain core concepts.
+            Viz/Presentation: Accordion for each pillar (Intent-Centricity, ARM, Juvix, IFC).
+            Interaction: Click to expand/collapse.
+            Justification: Organizes detailed explanations.
+            Library/Method: HTML, Tailwind, JS.
+        3.  Report Info: Top Three Novel Application Concepts (Sec 3 - PriConFin, SkillNet, PriDECom)
+            Goal: Inform, Detail.
+            Viz/Presentation: Structured text sections for each app, including pre-formatted Juvix code.
+            Interaction: Navigation via tabs to this section.
+            Justification: Allows focused exploration.
+            Library/Method: HTML, Tailwind.
+        4.  Report Info: Twenty Novel Application Ideas Table (Sec 4)
+            Goal: Inform, Compare, Organize.
+            Viz/Presentation: Interactive HTML Table (Rank, Idea, etc.); Bar Chart (Chart.js) for PMF.
+            Interaction: Table: Sort by Rank, PMF; Filter by PMF category; Search by keyword. Chart: Tooltips.
+            Justification: Overview of broader ideas, PMF analysis.
+            Library/Method: HTML, Tailwind, JS, Chart.js.
+        5.  Report Info: Brief Elaboration on Selected Ideas (Ranks 3-7 in Sec 4)
+            Goal: Inform, Detail.
+            Viz/Presentation: Text blocks within the "20 More Ideas" section.
+            Interaction: None beyond scrolling.
+            Justification: Provides more context for selected ideas.
+            Library/Method: HTML.
+        6.  Report Info: Strategic Considerations (Sec 5)
+            Goal: Inform, Advise.
+            Viz/Presentation: Text blocks, bullet points.
+            Interaction: None.
+            Justification: Conveys strategic insights.
+            Library/Method: HTML.
+        7.  Report Info: Conclusion (Sec 6)
+            Goal: Summarize, Conclude.
+            Viz/Presentation: Text block.
+            Interaction: None.
+            Justification: Provides final summary.
+            Library/Method: HTML.
+        CONFIRMATION: NO SVG graphics used. NO Mermaid JS used.
+    -->
+    <style>
+        .content-section { transition: opacity 0.5s ease-in-out; }
+        .hidden { display: none; opacity: 0; }
+        .visible { display: block; opacity: 1; }
+        .tab-active {
+            border-color: #f97316; /* orange-600 */
+            background-color: #f97316; /* orange-600 */
+            color: white;
+        }
+        .tab-inactive {
+            border-color: #fdba74; /* orange-300 */
+            color: #ea580c; /* orange-600 */
+            background-color: white;
+        }
+        .tab-inactive:hover {
+            background-color: #fed7aa; /* orange-200 */
+        }
+        .accordion-button {
+            background-color: #f5f5f4; /* stone-100 */
+            border: 1px solid #e7e5e4; /* stone-200 */
+        }
+        .accordion-button:hover {
+            background-color: #e7e5e4; /* stone-200 */
+        }
+        .accordion-content {
+            border: 1px solid #e7e5e4; /* stone-200 */
+            border-top: none;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px; /* Tailwind max-w-4xl */
+            margin-left: auto;
+            margin-right: auto;
+            height: 400px; /* Tailwind h-96 is 384px, this is a bit more */
+            max-height: 500px;
+        }
+        /* Styles for sortable table headers */
+        .sortable-header { cursor: pointer; }
+        .sortable-header::after { content: ' \2195'; /* Up-down arrow */ opacity: 0.5; }
+        .sortable-header.asc::after { content: ' \2191'; /* Up arrow */ opacity: 1; }
+        .sortable-header.desc::after { content: ' \2193'; /* Down arrow */ opacity: 1; }
+
+        /* Juvix code block styling */
+        pre.juvix-code {
+            background-color: #282c34; /* Dark background for code */
+            color: #abb2bf; /* Light text color for code */
+            padding: 1em;
+            border-radius: 0.5em;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        .juvix-code .keyword { color: #c678dd; } /* Purple for keywords */
+        .juvix-code .type { color: #e5c07b; } /* Yellow for types */
+        .juvix-code .function { color: #61afef; } /* Blue for functions */
+        .juvix-code .comment { color: #5c6370; font-style: italic; } /* Grey for comments */
+        .juvix-code .string { color: #98c379; } /* Green for strings */
+        .juvix-code .operator { color: #d19a66; } /* Orange for operators */
+        .juvix-code .punctuation { color: #abb2bf; } /* Default light text for punctuation */
+
+    </style>
+</head>
+<body class="bg-stone-100 text-neutral-800 font-sans leading-relaxed">
+
+    <header class="bg-orange-700 text-white p-6 shadow-md">
+        <div class="container mx-auto">
+            <h1 class="text-3xl font-bold">Novel Application Frontiers on the Anoma Architecture</h1>
+            <p class="text-lg text-orange-200">An Interactive Report Explorer</p>
+        </div>
+    </header>
+
+    <nav class="bg-stone-50 p-4 shadow sticky top-0 z-50">
+        <div class="container mx-auto flex flex-wrap justify-center space-x-2 sm:space-x-4">
+            <button data-tab="overview" class="tab-button px-4 py-2 rounded-md font-semibold border-2 tab-active">Overview</button>
+            <button data-tab="top-apps" class="tab-button px-4 py-2 rounded-md font-semibold border-2 tab-inactive">Top 3 Applications</button>
+            <button data-tab="more-ideas" class="tab-button px-4 py-2 rounded-md font-semibold border-2 tab-inactive">20 More Ideas</button>
+            <button data-tab="strategy" class="tab-button px-4 py-2 rounded-md font-semibold border-2 tab-inactive">Strategy & Outlook</button>
+        </div>
+    </nav>
+
+    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <section id="overview" class="content-section visible">
+            <div class="bg-white p-6 rounded-lg shadow mb-6">
+                <h2 class="text-2xl font-bold text-orange-700 mb-4">1. Executive Summary</h2>
+                <p class="mb-3">This report identifies and specifies novel, high-potential applications for the Anoma architecture, a distributed operating system designed for intent-centric applications. By leveraging its unique architectural pillars—intent-centricity, the Anoma Resource Machine (ARM), programmable Information Flow Control (IFC), and the Juvix programming language—Anoma offers a fertile ground for a new generation of decentralized applications (dApps). The applications proposed herein are specifically conceptualized to be distinct from those previously detailed on research.anoma.net, focusing on untapped opportunities.</p>
+                <p class="mb-3">Among the detailed analyses, concepts such as <strong>Decentralized, Privacy-Preserving Orchestration of Complex Conditional Financial Instruments</strong> and a <strong>Dynamic, Privacy-Enhanced Global Skill & Task Matching Network</strong> emerge as particularly transformative. These applications showcase Anoma's capacity to move beyond simple transactional dApps towards sophisticated, coordination-centric systems that manage complex agreements and multi-party interactions with granular privacy. Anoma's fundamental design, where users state their desired outcomes (intents) and a network of solvers determines the optimal path to achieve them, underpins this potential.</p>
+                <p>Beyond these in-depth explorations, this report outlines a broader spectrum of twenty application ideas, ranked by their potential product-market fit. The overarching conclusion is that Anoma's architecture is poised to foster dApps that address significant limitations in the current crypto landscape, including issues of privacy, user experience (UX), and Maximal Extractable Value (MEV). The system's emphasis on user-defined outcomes rather than pre-defined transaction paths facilitates a shift towards applications that can understand and adapt to a wide array of user desires. This positions Anoma not merely as an alternative blockchain, but as a foundational layer for more complex, equitable, and user-sovereign digital interactions.</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-2xl font-bold text-orange-700 mb-4">2. Anoma's Architectural Pillars for Next-Generation dApps</h2>
+                <p class="mb-4">Anoma's architecture is deliberately designed to overcome the limitations of previous blockchain generations and enable a new class of decentralized applications. Its core components work synergistically to provide unparalleled expressiveness, privacy, and efficiency. Understanding these pillars is crucial to appreciating the potential of the novel applications proposed in this report.</p>
+                
+                <div class="space-y-3">
+                    <div>
+                        <button class="accordion-toggle w-full text-left px-4 py-3 rounded-t-md text-lg font-semibold text-orange-600 focus:outline-none flex justify-between items-center">
+                            2.1. The Power of Intent-Centricity and Decentralized Counterparty Discovery
+                            <span class="accordion-icon transform transition-transform duration-300">&#9660;</span>
+                        </button>
+                        <div class="accordion-content p-4 rounded-b-md hidden">
+                            <p class="mb-3">Anoma represents a paradigm shift from transaction-defined execution to user-defined outcomes, achieved through its intent-centric design. Instead of meticulously crafting and submitting transactions that specify the exact computational path, users declare their "intents"—their desired end-states or goals. The Anoma network, through a sophisticated system of "solvers," then takes on the responsibility of finding the most efficient and effective way to satisfy these intents. As described in Anoma's vision, "a user will state the outcome that they would like and a network of automated solvers will determine the transactions to get there".</p>
+                            <p class="mb-3">These intents are not isolated commands; they are pieces of information that can be gossiped across the network, potentially reaching multiple solvers. Solvers, acting as economic agents, analyze the pool of intents, seeking opportunities to match or combine them. This process of "decentralized counterparty discovery" is fundamental to Anoma's power. For instance, if one user intends to swap asset X for asset Y, and another intends to swap asset Y for asset X, solvers can identify this complementary need and facilitate a direct settlement, potentially satisfying multiple intents within a single, efficient transaction.</p>
+                            <p>This approach fosters a level of emergent complexity and composability that surpasses traditional smart contract interactions. Instead of users needing to manually discover and interact with multiple disparate contracts to achieve a complex goal, Anoma's solvers can dynamically weave together different intents and resource logics. This creates an environment where complex multi-party agreements, intricate bartering scenarios, or conditional outcomes can be orchestrated with greater ease and efficiency. The system is designed not just to execute commands, but to understand and fulfill desires, opening the door to applications that manage nuanced coordination problems.</p>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="accordion-toggle w-full text-left px-4 py-3 accordion-button text-lg font-semibold text-orange-600 focus:outline-none flex justify-between items-center">
+                            2.2. The Anoma Resource Machine (ARM): Enabling Complex, Atomic, and Private State Transitions
+                            <span class="accordion-icon transform transition-transform duration-300">&#9660;</span>
+                        </button>
+                        <div class="accordion-content p-4 rounded-b-md hidden">
+                            <p class="mb-3">At the heart of Anoma's execution capabilities lies the Anoma Resource Machine (ARM), which defines and enforces the rules for valid state updates. The ARM employs a "resource model," distinguishing it from the account model (used by Ethereum) and the UTXO model (used by Bitcoin). In this model, a "resource" is the atomic unit of state. Each resource is immutable—created once and consumed once—and its behavior is governed by its associated "resource logic," a predicate defining the conditions under which it can be created or consumed. This design allows for the creation of applications with use cases extending far beyond purely financial contexts.</p>
+                            <p class="mb-3">One of the most powerful features of the ARM is its support for "atomic state transitions of arbitrary complexity." Unlike systems that impose strict limits on transaction size or computational steps (often measured in gas), the ARM's criterion for transaction completion is "transaction balance." The number of resources that can be created or consumed in a single transaction is not limited by the ARM itself. This means that a logically singular operation from a user's perspective, even one that involves numerous underlying state changes (i.e., the creation and consumption of many resources), can be bundled into one indivisible Anoma transaction. This capability is transformative for applications requiring robust all-or-nothing execution for complex deals, such as settling multi-leg financial derivatives, executing intricate multi-party agreements, or updating sophisticated game states where atomicity is paramount to prevent inconsistent states.</p>
+                            <p>Furthermore, the ARM provides "account abstraction" by default. Each resource is controlled by its specific resource logic, which can encode arbitrary constraints, not limited to simple signature checks. This inherent flexibility allows for sophisticated control mechanisms and customized behaviors for different types of assets or data.</p>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="accordion-toggle w-full text-left px-4 py-3 accordion-button text-lg font-semibold text-orange-600 focus:outline-none flex justify-between items-center">
+                            2.3. Juvix: A Declarative Language for Secure and Expressive Application Logic
+                            <span class="accordion-icon transform transition-transform duration-300">&#9660;</span>
+                        </button>
+                        <div class="accordion-content p-4 rounded-b-md hidden">
+                            <p class="mb-3">To define the resource logics and transaction functions that power Anoma applications, developers use Juvix. Juvix is a functional programming language specifically designed for Anoma's intent-centric and declarative programming model. Its syntax and structure are tailored to express the complex conditions and state transitions inherent in Anoma's resource model. The Anoma developer documentation provides comprehensive guides on defining resources, writing transaction functions, and creating projection functions (for reading state) using Juvix.</p>
+                            <p>A key characteristic of Juvix is its strong support for privacy-preserving technologies, including its ability to compile to arithmetic circuits suitable for Zero-Knowledge Proofs (ZKPs). This capability is not merely an add-on but is deeply synergistic with Anoma's broader commitment to Information Flow Control. It suggests that the very logic governing resource interactions can be privately verified. This allows for the development of applications where complex private computations and agreements can occur without revealing sensitive inputs or strategies to the wider network, a significant advancement over systems that only offer shielded transfers of assets. The functional nature of Juvix, combined with its ZKP capabilities, provides a robust foundation for building secure, verifiable, and highly expressive decentralized applications.</p>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="accordion-toggle w-full text-left px-4 py-3 accordion-button rounded-b-md text-lg font-semibold text-orange-600 focus:outline-none flex justify-between items-center">
+                            2.4. Information Flow Control (IFC): Building Applications with Programmable Privacy
+                            <span class="accordion-icon transform transition-transform duration-300">&#9660;</span>
+                        </button>
+                        <div class="accordion-content p-4 rounded-b-md hidden">
+                            <p class="mb-3">Anoma places a strong emphasis on "programmable data sovereignty", achieved through its sophisticated Information Flow Control (IFC) mechanisms and shielded execution capabilities. This means users and application developers can exercise precise control over what data is shared, with whom, and for what purposes. As stated in the ARM specification, "The parties whose intents are being addressed by the transaction can decide how much of the information about their state to reveal and to whom... realised with the help of shielded execution". This is a departure from the all-or-nothing privacy models of some systems, offering a more granular and flexible approach.</p>
+                            <p>This programmable privacy, when combined with Anoma's intent-centric model, enables the creation of what can be termed "private negotiation spaces." In such spaces, parties can discover each other and settle complex agreements without prematurely exposing their strategies, price limits, or sensitive conditions to the public mempool. This inherent capability directly mitigates risks like front-running and other forms of MEV that plague transparent blockchain systems. By allowing sensitive components of an intent to remain confidential until a suitable match is found and settlement is initiated, Anoma fosters an environment conducive to applications requiring high degrees of information control, such as private request-for-quote (RFQ) systems, sealed-bid auctions, and complex over-the-counter (OTC) deals.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="top-apps" class="content-section hidden">
+            <div class="bg-white p-6 rounded-lg shadow mb-6">
+                <h2 class="text-2xl font-bold text-orange-700 mb-4">3. Top Three Novel Application Concepts for Anoma: Detailed Specifications</h2>
+                <p class="mb-6">The following three application concepts have been selected for their strong leverage of Anoma's unique architectural features, their novelty (having been vetted against existing public documentation on research.anoma.net), and their potential for significant market impact. Each specification includes a conceptual outline of its Juvix implementation and interaction with an Anoma node.</p>
+
+                <div class="mb-8 p-4 border border-orange-200 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-sky-700 mb-3">Application 1: Decentralized, Privacy-Preserving Orchestration of Complex Conditional Financial Instruments (PriConFin)</h3>
+                    
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Problem Statement & Current Market Gaps:</h4>
+                    <p class="mb-3 text-sm">Current decentralized finance (DeFi) platforms struggle with expressing and executing complex, multi-leg conditional orders with robust privacy. Users often face limitations in order types, high risks of MEV (e.g., front-running, sandwich attacks on conditional orders), and an inability to atomically settle multifaceted financial strategies without exposing their full intent prematurely. Existing solutions either lack expressiveness, offer insufficient privacy, or cannot guarantee atomic execution of truly complex state changes.</p>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Conceptual Overview & Core Functionality:</h4>
+                    <p class="mb-3 text-sm">PriConFin would be a platform enabling users to create, discover, and settle highly customizable conditional financial instruments with strong privacy guarantees. Users could define intents for instruments like:
+                        <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                            <li>"Acquire Asset A if [condition] is met, while simultaneously hedging with Asset D, all within specified price slippage for each leg."</li>
+                            <li>"Execute a multi-stage yield farming strategy: If APY on Protocol P1 for Asset X drops below Y%, withdraw X, swap X for Z on DEX D1 (if liquidity > L), and deposit Z into Protocol P2 (if rewards > R%), all as a single atomic operation."</li>
+                        </ul>
+                    Users submit these complex intents, which remain partially or fully private. Solvers work to find counterparties or construct pathways (potentially involving multiple other intents or liquidity sources) to satisfy these conditions atomically.</p>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Leveraging Anoma:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li><strong>Intent-Centricity:</strong> Users express their high-level financial goals and conditions, not the precise transaction steps.</li>
+                        <li><strong>ARM Atomicity:</strong> The ARM's ability to handle "atomic state transitions of arbitrary complexity" is crucial for settling multi-leg instruments without risk of partial execution.</li>
+                        <li><strong>Information Flow Control (IFC):</strong> Users can shield the sensitive parameters of their conditional orders (e.g., exact trigger prices, complex logic) until a match is found, mitigating MEV.</li>
+                        <li><strong>Juvix Programmability:</strong> Juvix allows defining sophisticated resource logics for these custom instruments and the conditions for their execution, potentially verified by ZKPs.</li>
+                        <li><strong>Virtual Applications:</strong> The specific logic for a unique, complex instrument doesn't need a globally deployed contract; it can exist as content-addressed resource logic activated by user intents.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Juvix Conceptual Specification:</h4>
+                    <div class="overflow-x-auto mb-3">
+                        <table class="min-w-full text-sm border border-stone-200">
+                            <thead class="bg-stone-50">
+                                <tr>
+                                    <th class="p-2 border-b border-stone-200 text-left font-semibold">Juvix Component</th>
+                                    <th class="p-2 border-b border-stone-200 text-left font-semibold">Brief Description & Anoma Feature Leveraged</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Key Resource Name:</strong></td><td class="p-2 border-b border-stone-200"><code>ConditionalInstrumentIntentResource</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Represents a user's intent for a complex conditional financial instrument. Stores instrument parameters, conditions (potentially as ZKP-verifiable logic), and privacy preferences. Leverages ARM for state representation and Juvix for defining its structure.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Key Resource Name:</strong></td><td class="p-2 border-b border-stone-200"><code>MatchedSettlementObligationResource</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Created upon successful matching of one or more <code>ConditionalInstrumentIntentResource</code>s. Encodes the atomic settlement obligations for all parties. Leverages ARM atomicity.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Core Logic Snippet (conceptual):</strong></td><td class="p-2 border-b border-stone-200"><code>instrumentMatchingLogic : Logic</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Attached to <code>ConditionalInstrumentIntentResource</code>. Validates if conditions for matching are met (e.g., oracle data, counterparty compatibility, privacy constraints). Can involve ZKP verification of conditions using Juvix-compiled circuits. Leverages IFC for private condition evaluation.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Transaction Function Purpose:</strong></td><td class="p-2 border-b border-stone-200"><code>submitConditionalInstrumentIntent</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">User calls this to create a <code>ConditionalInstrumentIntentResource</code>. Consumes an ephemeral resource to create the persistent intent resource. Leverages Anoma's intent submission mechanism.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Transaction Function Purpose:</strong></td><td class="p-2 border-b border-stone-200"><code>settleMatchedInstruments</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Solver-initiated. Consumes matched <code>ConditionalInstrumentIntentResource</code>(s) and creates <code>MatchedSettlementObligationResource</code>(s) and resulting asset/state resources, all atomically. Leverages ARM's arbitrary complexity in atomic transactions.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Projection Function Example:</strong></td><td class="p-2 border-b border-stone-200"><code>getInstrumentStatus (intentID : ResourceID) : Maybe InstrumentStatus</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Allows a user (with appropriate permissions, respecting IFC) to query the status of their submitted intent (e.g., pending, matched, failed). Leverages Anoma's projection capabilities.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-sm font-semibold mb-1">Conceptual Juvix Snippet for <code>ConditionalInstrumentIntentResource</code> (Illustrative):</p>
+                    <pre class="juvix-code"><code><span class="keyword">module</span> PriConFinApp;
+<span class="keyword">import</span> Stdlib.Prelude <span class="keyword">open</span>;
+<span class="keyword">import</span> Applib <span class="keyword">open</span>;
+<span class="keyword">import</span> Anoma.Encode <span class="keyword">open</span>;
+<span class="comment">// Potentially import ZKP libraries or custom logic modules</span>
+
+<span class="comment">// Logic defining how an instrument intent can be processed</span>
+<span class="function">instrumentMatchingLogic</span> : <span class="type">Logic</span> := <span class="type">Logic.mk</span> \{ <span class="function">context</span> =>
+    <span class="comment">// Complex validation: check oracle feeds, counterparty intent compatibility,</span>
+    <span class="comment">// ZKP proof of condition satisfaction, etc.</span>
+    <span class="comment">// Access shielded data from context if authorized by IFC.</span>
+    <span class="keyword">true</span> <span class="comment">// Simplified for illustration</span>
+};
+
+<span class="comment">// Resource representing a complex conditional financial instrument intent</span>
+<span class="function">mkConditionalInstrumentIntentResource</span>
+    (<span class="function">nonce</span> : <span class="type">Nonce</span>)
+    (<span class="function">instrumentDefinition</span> : <span class="type">String</span>) <span class="comment">// Encoded definition of the instrument & conditions</span>
+    (<span class="function">ownerPublicKey</span> : <span class="type">PublicKey</span>)
+    (<span class="function">privacyParameters</span> : <span class="type">String</span>) <span class="comment">// Encoded privacy settings (e.g., shielded fields)</span>
+    {<span class="function">ephemeral</span> : <span class="type">Bool</span> := <span class="keyword">false</span>}
+    : <span class="type">Resource</span> :=
+    <span class="type">Resource.mk</span>@{
+        <span class="function">label</span> := <span class="type">Label.fromNat</span> (<span class="function">builtinAnomaEncode</span> (<span class="string">"PriConFinIntent:"</span> ++ <span class="function">ownerPublicKey</span> ++ (<span class="type">Nat.toString</span> (<span class="type">Nonce.toRaw</span> <span class="function">nonce</span>))));
+        <span class="function">logic</span> := <span class="type">Encoded.encode</span> <span class="function">instrumentMatchingLogic</span>;
+        <span class="function">value</span> := <span class="type">AnomaAtom.fromNat</span> 0; <span class="comment">// Could represent a bond or initial margin</span>
+        <span class="comment">// Additional fields for asset types, amounts, trigger conditions, ZKP commitments etc.</span>
+        <span class="comment">//... other necessary fields as per [7] (Define a Resource)</span>
+    };</code></pre>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Interaction with Anoma Node:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li><strong>User Intent Submission:</strong> A user, via a specialized client application, would formulate their complex financial intent. This intent, containing the instrument's parameters and conditions (potentially with parts encrypted or committed to via ZKPs), would be serialized and sent to an Anoma client. The Anoma client relays this to an Anoma node, which then gossips it to the intent pool.</li>
+                        <li><strong>Solver Interaction (High-Level):</strong> Solvers monitor the intent pool for <code>ConditionalInstrumentIntentResource</code>s. Advanced solvers might specialize in financial instrument matching, using sophisticated algorithms (and potentially private computation techniques if intents are shielded) to find compatible intents or construct multi-step paths to fulfill them. Upon finding a match, a solver constructs the <code>settleMatchedInstruments</code> transaction.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Novelty and Differentiation:</h4>
+                     <p class="mb-3 text-sm">PriConFin is novel due to its combination of:</p>
+                    <ol class="list-decimal list-inside ml-4 mb-3 text-sm">
+                        <li><strong>Arbitrary Complexity with Atomicity:</strong> Existing DeFi often requires breaking complex strategies into multiple, non-atomic transactions. Anoma's ARM allows true atomicity.</li>
+                        <li><strong>Deep Programmable Privacy:</strong> Beyond simple shielded transfers, PriConFin allows privacy for the <em>conditions and logic</em> of the instruments themselves, enabled by IFC and Juvix's ZKP capabilities. This drastically reduces MEV.</li>
+                        <li><strong>Intent-Driven Matching:</strong> Users express high-level goals, and solvers handle the complex matching, lowering user burden.</li>
+                    </ol>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Potential Revenue Model:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li>Transaction fees on successfully settled instruments (a small percentage taken by the protocol or solvers).</li>
+                        <li>Fees for deploying highly complex or bespoke instrument logics.</li>
+                        <li>Subscription tiers for advanced analytics or priority solver access.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Target User Segments & Product-Market Fit Analysis:</h4>
+                    <ul class="list-disc list-inside ml-4 text-sm">
+                        <li>Sophisticated DeFi traders, arbitrageurs, hedge funds, DAOs managing treasuries.</li>
+                        <li><strong>Product-Market Fit: High.</strong> There's a clear demand for more expressive, private, and MEV-resistant DeFi primitives. The complexity of current solutions and the billions lost to MEV indicate a significant pain point.</li>
+                    </ul>
+                </div>
+
+                <div class="mb-8 p-4 border border-orange-200 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-sky-700 mb-3">Application 2: Dynamic, Privacy-Enhanced Global Skill & Task Matching Network (SkillNet Anoma)</h3>
+                    
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Problem Statement & Current Market Gaps:</h4>
+                    <p class="mb-3 text-sm">Existing freelance and gig economy platforms are centralized, extract high fees, offer limited privacy for skills and needs, and often struggle with fair matching or dispute resolution. Decentralized alternatives are nascent and often lack the sophistication for nuanced skill representation, private need expression, or complex agreement formation (e.g., multi-stage projects with conditional payments). Users' skills and availability are often public, and their specific needs can be exposed.</p>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Conceptual Overview & Core Functionality:</h4>
+                    <p class="mb-3 text-sm">SkillNet Anoma would be a decentralized network where individuals and organizations can privately express their skills, availability, and needs (tasks/projects).
+                        <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                            <li><strong>Skill Providers:</strong> Can create detailed, verifiable (potentially via attestations or ZKPs of credentials) profiles of their skills, desired compensation, and availability, with granular privacy controls (e.g., reveal full resume only to matched, interested parties).</li>
+                            <li><strong>Task Posters:</strong> Can define tasks or projects with specific requirements, budget ranges, and timelines, also with privacy controls (e.g., keep project details confidential until suitable candidates are shortlisted).</li>
+                        </ul>
+                    Users submit intents like "I need a Juvix developer with ZKP experience for a 3-month project, budget X, starting next month" or "I am a graphic designer specializing in UI/UX, available for 20hrs/week, rate Y, seeking projects in Web3." Solvers match these intents based on compatibility, reputation, and potentially other criteria. Agreements can be complex (e.g., milestone-based payments, NDAs represented as resources).</p>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Leveraging Anoma:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li><strong>Intent-Centricity:</strong> Users declare their skills or task needs as intents.</li>
+                        <li><strong>Decentralized Counterparty Discovery:</strong> Solvers find optimal matches between skill providers and task posters.</li>
+                        <li><strong>Information Flow Control (IFC):</strong> Crucial for allowing users to keep their detailed profiles or project specs private until a high-potential match is found.</li>
+                        <li><strong>ARM & Resource Model:</strong> Enables representation of skills, tasks, agreements, and reputation as distinct resources with custom logic. Complex agreements (e.g., escrow, milestone payments) can be settled atomically.</li>
+                        <li><strong>Juvix:</strong> Defines the logic for skill/task resources, matching criteria, and agreement terms. Attestations or credentials could be ZKP-verified.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Juvix Conceptual Specification:</h4>
+                     <div class="overflow-x-auto mb-3">
+                        <table class="min-w-full text-sm border border-stone-200">
+                            <thead class="bg-stone-50">
+                                <tr>
+                                    <th class="p-2 border-b border-stone-200 text-left font-semibold">Juvix Component</th>
+                                    <th class="p-2 border-b border-stone-200 text-left font-semibold">Brief Description & Anoma Feature Leveraged</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Key Resource Name:</strong></td><td class="p-2 border-b border-stone-200"><code>SkillProfileIntentResource</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Represents a skill provider's intent to offer services. Contains (potentially shielded) details about skills, availability, rates. Leverages IFC for privacy and ARM for state.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Key Resource Name:</strong></td><td class="p-2 border-b border-stone-200"><code>TaskNeedIntentResource</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Represents a task poster's intent to find skills. Contains (potentially shielded) project details, budget, requirements. Leverages IFC for privacy and Juvix for complex requirement encoding.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Key Resource Name:</strong></td><td class="p-2 border-b border-stone-200"><code>WorkAgreementResource</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Created upon a match. Defines terms, payment schedules, deliverables, dispute resolution logic. Leverages ARM atomicity for agreement finalization and Juvix for complex terms.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Core Logic Snippet (conceptual):</strong></td><td class="p-2 border-b border-stone-200"><code>profileMatchingLogic : Logic</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Used by solvers. Defines how <code>SkillProfileIntentResource</code> and <code>TaskNeedIntentResource</code> are compared for compatibility, potentially considering reputation, skill endorsements (other resources). Leverages Anoma's solver ecosystem.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Transaction Function Purpose:</strong></td><td class="p-2 border-b border-stone-200"><code>postSkillProfile</code> / <code>postTaskNeed</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Allows users to create their respective intent resources on the network. Leverages Anoma's intent submission.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Transaction Function Purpose:</strong></td><td class="p-2 border-b border-stone-200"><code>formWorkAgreement</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Initiated by a solver or mutually by matched parties. Consumes the matched intent resources and creates a <code>WorkAgreementResource</code>. Leverages ARM atomicity.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Projection Function Example:</strong></td><td class="p-2 border-b border-stone-200"><code>getMatchingTasks (skillQuery : EncodedSkillQuery) : List&lt;TaskPreview&gt;</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Allows a skill provider to (privately) query for matching tasks based on their profile, only revealing minimal data until further interaction. Leverages IFC and Anoma's projection capabilities.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-sm font-semibold mb-1">Conceptual Juvix Snippet for <code>SkillProfileIntentResource</code> (Illustrative):</p>
+                    <pre class="juvix-code"><code><span class="keyword">module</span> SkillNetApp;
+<span class="keyword">import</span> Stdlib.Prelude <span class="keyword">open</span>;
+<span class="keyword">import</span> Applib <span class="keyword">open</span>;
+<span class="keyword">import</span> Anoma.Encode <span class="keyword">open</span>;
+<span class="comment">// Import reputation system or credential verification modules</span>
+
+<span class="comment">// Logic defining how a skill profile can be matched or updated</span>
+<span class="function">skillProfileLogic</span> : <span class="type">Logic</span> := <span class="type">Logic.mk</span> \{ <span class="function">context</span> =>
+    <span class="comment">// Validation for updates, or conditions for being considered in a match.</span>
+    <span class="comment">// e.g., check if attestations are still valid.</span>
+    <span class="keyword">true</span> <span class="comment">// Simplified</span>
+};
+
+<span class="comment">// Resource representing a skill provider's intent</span>
+<span class="function">mkSkillProfileIntentResource</span>
+    (<span class="function">nonce</span> : <span class="type">Nonce</span>)
+    (<span class="function">providerPublicKey</span> : <span class="type">PublicKey</span>)
+    (<span class="function">encryptedSkillsData</span> : <span class="type">String</span>) <span class="comment">// Detailed skills, resume, portfolio - encrypted</span>
+    (<span class="function">publicTags</span> : <span class="type">List</span> <span class="type">String</span>) <span class="comment">// Publicly searchable keywords</span>
+    (<span class="function">availabilityCommitment</span> : <span class="type">String</span>) <span class="comment">// Commitment to availability (e.g., ZKP of schedule)</span>
+    {<span class="function">ephemeral</span> : <span class="type">Bool</span> := <span class="keyword">false</span>}
+    : <span class="type">Resource</span> :=
+    <span class="type">Resource.mk</span>@{
+        <span class="function">label</span> := <span class="type">Label.fromNat</span> (<span class="function">builtinAnomaEncode</span> (<span class="string">"SkillProfile:"</span> ++ <span class="function">providerPublicKey</span>));
+        <span class="function">logic</span> := <span class="type">Encoded.encode</span> <span class="function">skillProfileLogic</span>;
+        <span class="function">value</span> := <span class="type">AnomaAtom.fromNat</span> 0; <span class="comment">// Placeholder, or could represent a stake for reputation</span>
+        <span class="comment">//... other necessary fields as per [7] (Define a Resource)</span>
+    };</code></pre>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Interaction with Anoma Node:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li><strong>User Intent Submission:</strong> Users (individuals or organizations) would use a SkillNet client to define their skill profiles or task needs. Sensitive data would be encrypted client-side, with only public tags or commitments submitted as part of the intent to an Anoma node via the Anoma client.</li>
+                        <li><strong>Solver Interaction (High-Level):</strong> Solvers specializing in human resources or project management would monitor relevant intents. They would use public tags for initial filtering and then, potentially through an interactive, privacy-preserving protocol (brokered by Anoma's IFC), facilitate more detailed matching. Once a mutual interest is established, solvers help construct the <code>formWorkAgreement</code> transaction.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Novelty and Differentiation:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li><strong>Granular Privacy for Skills/Needs:</strong> Unlike public platforms or simpler blockchain job boards, SkillNet allows users to keep core details private until a strong potential match is found, thanks to IFC.</li>
+                        <li><strong>Complex Agreement Structures:</strong> Anoma's ARM and Juvix can model sophisticated work agreements (milestones, conditional payments, NDAs as resources) that are settled atomically.</li>
+                        <li><strong>Reduced Platform Risk & Fees:</strong> Decentralization reduces reliance on a central intermediary and its associated fees/censorship risks.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Potential Revenue Model:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li>Small percentage fee on successfully completed and paid-out work agreements, collected by the protocol or solvers.</li>
+                        <li>Fees for premium features like advanced profile verification, enhanced visibility, or specialized solver services for finding niche talent/projects.</li>
+                        <li>Staking mechanisms for reputation or dispute resolution participation.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Target User Segments & Product-Market Fit Analysis:</h4>
+                    <ul class="list-disc list-inside ml-4 text-sm">
+                        <li>Freelancers, independent contractors, consultants, gig workers across all industries.</li>
+                        <li>Companies of all sizes seeking specialized talent for projects.</li>
+                        <li>DAOs looking for contributors.</li>
+                        <li><strong>Product-Market Fit: High.</strong> The global freelance market is enormous and growing. Pain points around fees, privacy, and fair matching in centralized platforms are well-documented. A decentralized, private, and expressive alternative has strong potential.</li>
+                    </ul>
+                </div>
+
+                <div class="p-4 border border-orange-200 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-sky-700 mb-3">Application 3: Decentralized Cross-Organizational Data Escrow and Computation (PriDECom)</h3>
+                    
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Problem Statement & Current Market Gaps:</h4>
+                    <p class="mb-3 text-sm">Organizations often need to collaborate on sensitive datasets (e.g., for research, joint product development, supply chain optimization) but are hindered by privacy concerns, trust issues, and the complexity of setting up secure data sharing and computation agreements. Existing solutions are often centralized, costly, or lack the flexibility for custom, verifiable computation on combined private data. Fear of data leakage or misuse prevents valuable collaborations.</p>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Conceptual Overview & Core Functionality:</h4>
+                    <p class="mb-3 text-sm">PriDECom enables multiple organizations to pool encrypted data into a temporary, jointly controlled escrow, define computations to be performed on this combined dataset (e.g., statistical analysis, machine learning model training), and receive verifiable results without any single party (including the computation provider) seeing the raw data of others.
+                        <ol class="list-decimal list-inside ml-4 mb-3 text-sm">
+                            <li><strong>Data Contribution:</strong> Organizations encrypt their datasets and contribute commitments to these datasets as resources.</li>
+                            <li><strong>Computation Definition:</strong> A Juvix-defined computation (potentially a ZKP circuit or an MPC protocol) is agreed upon.</li>
+                            <li><strong>Intent to Compute:</strong> Parties express an intent to have this computation run on their combined data.</li>
+                            <li><strong>Secure Computation:</strong> Solvers (or specialized computation nodes) execute the computation using the encrypted inputs, leveraging Anoma's IFC and potentially ZKPs/MPC.</li>
+                            <li><strong>Result Delivery:</strong> Verifiable (and possibly private) results are delivered back to the participating organizations. The original encrypted data resources are then consumed or managed according to the agreement.</li>
+                        </ol>
+                    </p>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Leveraging Anoma:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li><strong>Information Flow Control (IFC):</strong> Essential for managing encrypted data contributions and ensuring data is only accessed by the authorized computation process.</li>
+                        <li><strong>Juvix & ZKPs/MPC:</strong> Juvix can define the computation logic, which can be compiled into ZKP circuits or orchestrate MPC protocols, ensuring verifiable and private execution.</li>
+                        <li><strong>ARM & Resource Model:</strong> Data contributions, computation agreements, and results are represented as resources with specific logics governing their lifecycle and access. Atomicity ensures that either the full computation agreement is honored, or no data is compromised.</li>
+                        <li><strong>Intent-Centricity:</strong> Organizations express their intent to participate in a specific type of collaborative computation under defined privacy conditions.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Juvix Conceptual Specification:</h4>
+                    <div class="overflow-x-auto mb-3">
+                        <table class="min-w-full text-sm border border-stone-200">
+                            <thead class="bg-stone-50">
+                                <tr>
+                                    <th class="p-2 border-b border-stone-200 text-left font-semibold">Juvix Component</th>
+                                    <th class="p-2 border-b border-stone-200 text-left font-semibold">Brief Description & Anoma Feature Leveraged</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Key Resource Name:</strong></td><td class="p-2 border-b border-stone-200"><code>EncryptedDataContributionResource</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Represents an organization's encrypted dataset commitment. Includes metadata and access control logic. Leverages IFC for data protection and ARM for state.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Key Resource Name:</strong></td><td class="p-2 border-b border-stone-200"><code>ComputationAgreementResource</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Defines the terms of the collaborative computation: participating parties, data sources, the Juvix computation logic (or ZKP circuit ID), result distribution rules. Leverages Juvix for logic definition.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Key Resource Name:</strong></td><td class="p-2 border-b border-stone-200"><code>VerifiedComputationResultResource</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Stores the verifiable (and potentially encrypted) output of the computation. Its logic ensures it can only be accessed by authorized parties. Leverages ARM atomicity for result finalization.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Core Logic Snippet (conceptual):</strong></td><td class="p-2 border-b border-stone-200"><code>secureComputationLogic : Logic</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Attached to <code>ComputationAgreementResource</code>. Orchestrates the secure computation process, verifies inputs/outputs, and ensures adherence to privacy constraints. May involve interaction with ZKP verifiers or MPC coordinators. Leverages Juvix's ZKP compilation capabilities.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Transaction Function Purpose:</strong></td><td class="p-2 border-b border-stone-200"><code>initiateComputationAgreement</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Allows a consortium of organizations to create a <code>ComputationAgreementResource</code> and link their <code>EncryptedDataContributionResource</code>s. Leverages Anoma's intent system for multi-party agreement.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Transaction Function Purpose:</strong></td><td class="p-2 border-b border-stone-200"><code>executeAndFinalizeComputation</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Triggered by a solver/computation node. Consumes the <code>ComputationAgreementResource</code> and relevant <code>EncryptedDataContributionResource</code>s (or accesses them via shielded calls), performs the computation, and creates <code>VerifiedComputationResultResource</code>(s). Leverages ARM atomicity.</td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Projection Function Example:</strong></td><td class="p-2 border-b border-stone-200"><code>getComputationStatus (agreementID : ResourceID) : Maybe ComputationStatus</code></td></tr>
+                                <tr><td class="p-2 border-b border-stone-200"><strong>Description:</strong></td><td class="p-2 border-b border-stone-200">Allows participating organizations to securely query the status of their computation. Leverages IFC for access control.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-sm font-semibold mb-1">Conceptual Juvix Snippet for <code>ComputationAgreementResource</code> (Illustrative):</p>
+                    <pre class="juvix-code"><code><span class="keyword">module</span> PriDEComApp;
+<span class="keyword">import</span> Stdlib.Prelude <span class="keyword">open</span>;
+<span class="keyword">import</span> Applib <span class="keyword">open</span>;
+<span class="keyword">import</span> Anoma.Encode <span class="keyword">open</span>;
+<span class="comment">// Import cryptographic libraries, ZKP/MPC interface modules</span>
+
+<span class="comment">// Logic defining the collaborative computation execution</span>
+<span class="function">secureComputationLogic</span> : <span class="type">Logic</span> := <span class="type">Logic.mk</span> \{ <span class="function">context</span> =>
+    <span class="comment">// Validate participant signatures, data commitments, computation parameters.</span>
+    <span class="comment">// Orchestrate calls to external ZKP provers/verifiers or MPC nodes.</span>
+    <span class="comment">// Ensure results are correctly generated and committed.</span>
+    <span class="keyword">true</span> <span class="comment">// Simplified</span>
+};
+
+<span class="comment">// Resource representing the agreement for a decentralized computation</span>
+<span class="function">mkComputationAgreementResource</span>
+    (<span class="function">nonce</span> : <span class="type">Nonce</span>)
+    (<span class="function">participantPublicKeys</span> : <span class="type">List</span> <span class="type">PublicKey</span>)
+    (<span class="function">dataContributionIDs</span> : <span class="type">List</span> <span class="type">ResourceID</span>)
+    (<span class="function">computationLogicID</span> : <span class="type">String</span>) <span class="comment">// Identifier for the Juvix/ZKP/MPC logic</span>
+    (<span class="function">resultEncryptionKeys</span> : <span class="type">Map</span> <span class="type">PublicKey</span> <span class="type">EncryptedKey</span>) <span class="comment">// How results are encrypted for each party</span>
+    {<span class="function">ephemeral</span> : <span class="type">Bool</span> := <span class="keyword">false</span>}
+    : <span class="type">Resource</span> :=
+    <span class="type">Resource.mk</span>@{
+        <span class="function">label</span> := <span class="type">Label.fromNat</span> (<span class="function">builtinAnomaEncode</span> (<span class="string">"PriDEComAgreement:"</span> ++ (<span class="type">Nat.toString</span> (<span class="type">Nonce.toRaw</span> <span class="function">nonce</span>))));
+        <span class="function">logic</span> := <span class="type">Encoded.encode</span> <span class="function">secureComputationLogic</span>;
+        <span class="function">value</span> := <span class="type">AnomaAtom.fromNat</span> 0; <span class="comment">// Could represent a fee pool for computation</span>
+        <span class="comment">//... other necessary fields as per [7] (Define a Resource)</span>
+    };</code></pre>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Interaction with Anoma Node:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li><strong>User Intent Submission:</strong> Participating organizations, through a PriDECom client, would define the computation parameters and commit their encrypted data. This collective intent, forming a <code>ComputationAgreementResource</code> proposal, is submitted to an Anoma node.</li>
+                        <li><strong>Solver Interaction (High-Level):</strong> Specialized "computation orchestrator" solvers (or designated computation nodes within the consortium) would pick up this agreement. They would execute the defined Juvix logic, which might involve coordinating off-chain ZKP generation or MPC protocols, using the encrypted data inputs. The solver then submits a transaction to create the <code>VerifiedComputationResultResource</code>.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Novelty and Differentiation:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li><strong>Trustless Multi-Party Computation:</strong> Enables collaboration on sensitive data without a central trusted party, which is a major hurdle currently.</li>
+                        <li><strong>Verifiable & Customizable Computations:</strong> Juvix allows defining arbitrary computations, and ZKPs/IFC ensure verifiability and privacy. This is more flexible than many existing "confidential compute" solutions.</li>
+                        <li><strong>Data Sovereignty:</strong> Organizations retain control over their raw data; only encrypted versions or commitments are used in the shared computation.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Potential Revenue Model:</h4>
+                    <ul class="list-disc list-inside ml-4 mb-3 text-sm">
+                        <li>Fees for orchestrating and executing computations, paid by the participating organizations to solvers or specialized computation providers.</li>
+                        <li>Licensing of pre-built, verified Juvix computation modules (e.g., for specific types of statistical analysis or ML model training).</li>
+                        <li>Staking by computation providers to guarantee service levels or security.</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-lg text-neutral-700 mt-4 mb-2">Target User Segments & Product-Market Fit Analysis:</h4>
+                    <ul class="list-disc list-inside ml-4 text-sm">
+                        <li>Research institutions (e.g., medical, pharmaceutical) needing to analyze combined sensitive patient data.</li>
+                        <li>Financial institutions for joint fraud detection or risk modeling.</li>
+                        <li>Supply chain partners for collaborative forecasting or optimization.</li>
+                        <li>AI/ML companies needing to train models on diverse, private datasets.</li>
+                        <li><strong>Product-Market Fit: Medium to High.</strong> While technically complex, the need for secure multi-party data collaboration and computation is immense and growing across many high-value industries. Anoma's unique features directly address the core trust and privacy barriers.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="more-ideas" class="content-section hidden">
+            <div class="bg-white p-6 rounded-lg shadow mb-6">
+                <h2 class="text-2xl font-bold text-orange-700 mb-4">4. A Broader Horizon: Twenty Novel Application Ideas for Anoma</h2>
+                <p class="mb-3">Beyond the three detailed concepts, Anoma's architecture can support a wide array of innovative applications. The following table presents twenty such ideas, ranked by an estimation of their potential product-market fit. This ranking considers perceived market need, the unique leverage Anoma provides, novelty compared to existing solutions, potential user base, and feasibility.</p>
+                <p class="mb-6">The diversity of these applications underscores Anoma's potential to extend beyond DeFi into areas like Decentralized Science (DeSci), Decentralized Social (DeSoc) platforms, advanced Decentralized Autonomous Organizations (DAOs), and sophisticated Real-World Asset (RWA) management.</p>
+
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold text-sky-700 mb-3">Product-Market Fit Visualization</h3>
+                     <div class="chart-container bg-white p-4 rounded-lg shadow-inner border border-stone-200">
+                        <canvas id="pmfChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <input type="text" id="ideaSearch" placeholder="Search ideas..." class="p-2 border border-stone-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:w-1/3">
+                    <div class="flex items-center gap-2">
+                        <label for="pmfFilter" class="text-sm font-medium text-neutral-700">Filter by PMF:</label>
+                        <select id="pmfFilter" class="p-2 border border-stone-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500">
+                            <option value="">All</option>
+                            <option value="High">High</option>
+                            <option value="Medium-High">Medium-High</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Low-Medium">Low-Medium</option>
+                            <option value="Low">Low</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto shadow-md rounded-lg">
+                    <table id="ideasTable" class="min-w-full w-full text-sm text-left text-neutral-700">
+                        <thead class="text-xs text-neutral-700 uppercase bg-stone-200">
+                            <tr>
+                                <th scope="col" class="px-4 py-3 sortable-header" data-sort="rank">Rank</th>
+                                <th scope="col" class="px-4 py-3 sortable-header" data-sort="idea">Application Idea</th>
+                                <th scope="col" class="px-4 py-3">Brief Description</th>
+                                <th scope="col" class="px-4 py-3">Problem(s) Solved</th>
+                                <th scope="col" class="px-4 py-3">Core Anoma Feature(s) Leveraged</th>
+                                <th scope="col" class="px-4 py-3">Potential Revenue Model (or Public Good)</th>
+                                <th scope="col" class="px-4 py-3 sortable-header" data-sort="novelty">Novelty Factor</th>
+                                <th scope="col" class="px-4 py-3 sortable-header" data-sort="pmf">Estimated PMF</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">
+                            </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-8">
+                    <h3 class="text-xl font-semibold text-sky-700 mb-3">Brief Elaboration on Selected Ideas (from Rank 3-7)</h3>
+                    <div class="space-y-4 text-sm">
+                        <div class="p-3 bg-stone-50 rounded-md border border-stone-200">
+                            <p><strong>3. Decentralized Private RFQ/Auction Platform:</strong> This application leverages Anoma's IFC to allow businesses or individuals to solicit quotes or conduct auctions where bid amounts and bidder identities remain confidential until a winning bid is selected and accepted. Solvers could manage the bid submission and reveal process according to predefined rules. This addresses significant inefficiencies and risks of information leakage in traditional procurement and auction systems, fostering fairer price discovery. Anoma's ARM would represent bids as resources with specific reveal logic.</p>
+                        </div>
+                        <div class="p-3 bg-stone-50 rounded-md border border-stone-200">
+                            <p><strong>5. Private, Composable Derivatives Marketplace:</strong> Users could go beyond standard options or futures by defining highly bespoke derivative contracts in Juvix (e.g., a contract based on a complex formula of multiple underlying assets or oracle feeds). These intents for custom derivatives could be privately matched by solvers, and their settlement would be atomic thanks to the ARM. IFC would shield the specifics of these unique derivatives from public view, attracting sophisticated traders who require confidentiality for their strategies.</p>
+                        </div>
+                         <div class="p-3 bg-stone-50 rounded-md border border-stone-200">
+                            <p><strong>6. Decentralized Reputation & Attestation System:</strong> This system would allow users to accumulate verifiable attestations for skills, achievements, or trustworthiness from various sources. These attestations would be stored as resources on Anoma, with IFC enabling users to selectively disclose relevant parts of their reputation to specific counterparties for specific purposes (e.g., proving creditworthiness for a loan, or expertise for a SkillNet Anoma project). This creates a portable, user-controlled reputation layer that is currently missing in Web3.</p>
+                        </div>
+                        <div class="p-3 bg-stone-50 rounded-md border border-stone-200">
+                           <p><strong>7. Dynamic Multi-Party Barter Network:</strong> This application takes advantage of Anoma's intent-matching capabilities to facilitate complex bartering scenarios that go beyond simple two-party exchanges. A user could express an intent like "I have Asset A, want Asset C, but am willing to accept Asset B as an intermediary if needed." Solvers could then discover a chain of intents (e.g., User1: A for B; User2: B for C) and propose an atomic multi-party settlement, unlocking liquidity for otherwise illiquid assets or fulfilling complex needs without requiring a common currency for every leg.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="strategy" class="content-section hidden">
+            <div class="bg-white p-6 rounded-lg shadow mb-6">
+                <h2 class="text-2xl font-bold text-orange-700 mb-4">5. Strategic Considerations for Building on Anoma</h2>
+                <p class="mb-4">Developing successful applications on Anoma requires a shift in mindset from traditional dApp development. Builders should focus on leveraging Anoma's unique strengths to address problems that are currently intractable or poorly solved by existing blockchain architectures.</p>
+                
+                <h3 class="text-xl font-semibold text-sky-700 mt-4 mb-2">Identifying Untapped Niches and User Needs:</h3>
+                <p class="mb-3">Anoma's architecture, particularly its unique expressiveness, opens up "blue ocean" opportunities by enabling application types that are currently infeasible on other platforms. Developers should look beyond simply porting existing dApp models. Instead, the focus should be on problems where granular privacy, the ability to form complex multi-party agreements, and user-defined outcomes are paramount. The limitations of current crypto applications, such as MEV, poor UX, and privacy vulnerabilities, provide a rich source of problems that Anoma is well-suited to address. Applications that require sophisticated coordination, private negotiation, or the atomic execution of multifaceted state changes are prime candidates.</p>
+
+                <h3 class="text-xl font-semibold text-sky-700 mt-4 mb-2">The Critical Role of Solvers in Application Ecosystems:</h3>
+                <p class="mb-3">The success of many Anoma applications will be intrinsically linked to the development of a robust, innovative, and diverse solver ecosystem. Solvers are not passive transaction processors; they are active economic agents responsible for discovering counterparties and calculating optimal routes to satisfy user intents. Application designers must consider how their dApps will interact with solvers. This might involve defining clear interfaces for solvers, providing incentives for specialized solver development (e.g., solvers for complex financial derivatives vs. solvers for skill matching), or even designing applications where users themselves can act as solvers within a specific context. The economic design of solver rewards and the mechanisms for solver discovery will be crucial for the health and efficiency of the Anoma network and its applications.</p>
+                <p class="mb-3">The principle of "User Decides Topology, roles determined at runtime!" further underscores the dynamism of the Anoma ecosystem. This implies that application environments on Anoma can be highly adaptive and specialized. Communities or user groups could dynamically configure networks of Anoma nodes (which run the same software but with customizable configurations) for specific tasks. For example, one might envision dedicated solver sub-networks optimized for high-frequency trading intents, operating alongside other sub-networks configured for maximum privacy in sensitive data exchange applications. This allows for a form of application-specific infrastructure that remains part of the broader, interoperable Anoma ecosystem.</p>
+                <p>Moreover, the concept that "applications are virtual" and "content-addressed by their specific logics" significantly lowers the barrier to entry for niche or experimental applications. Developers do not need to "deploy" a monolithic contract in the traditional sense. Instead, they define and share resource logics. If users find these logics useful and express intents that can be satisfied by them, an "application instance" effectively materializes. This could lead to a Cambrian explosion of micro-applications and highly specialized tools, as developers can create and share useful logic without the overhead of a formal deployment process, fostering rapid innovation for even small user groups.</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-2xl font-bold text-orange-700 mb-4">6. Conclusion: Pioneering the Intent-Centric Future with Anoma</h2>
+                <p class="mb-3">Anoma stands poised to redefine the landscape of decentralized applications by fundamentally shifting the paradigm from transaction-centric execution to a truly user-intent-driven model. Its architecture is not an incremental improvement but a foundational redesign aimed at creating a more expressive, private, and equitable digital future. As Anoma's vision states, it aims to build an infrastructure "capable of understanding any and all varieties of user desires" and to "evolve the network to meet those desires".</p>
+                <p class="mb-3">The novel applications conceptualized in this report—ranging from sophisticated private financial instruments and dynamic skill-matching networks to secure multi-organizational data collaboration—are testaments to Anoma's unique capabilities. The core advantages of its architecture, including the unparalleled expressiveness of intents, the atomic execution of arbitrarily complex state transitions via the ARM, the granular programmable privacy afforded by Information Flow Control, and the secure logic definition through Juvix, collectively enable these new frontiers.</p>
+                <p>Anoma's ambition extends beyond being just another Layer 1 blockchain; it aims to serve as a foundational "OS for Web3" or a "fundamental economic and coordination infrastructure." This suggests its most profound impact may lie in enabling entirely new categories of interaction, economic organization, and social coordination that are currently difficult to even conceptualize. By addressing the core limitations of current crypto systems—such as MEV, data privacy, and user sovereignty—Anoma offers the tools to build a more sophisticated, fair, and user-centric decentralized world, fostering autonomy and interoperability for communities. The journey ahead involves cultivating a vibrant ecosystem of users, developers, and solvers who can harness these powerful primitives to build the next generation of truly decentralized solutions.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-neutral-800 text-stone-300 text-center p-6 mt-12">
+        <p>&copy; 2024 Interactive Anoma Report Explorer. Content derived from the provided report.</p>
+        <p class="text-xs">This is a conceptual SPA for report exploration.</p>
+    </footer>
+
+<script>
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const contentSections = document.querySelectorAll('.content-section');
+    const accordionToggles = document.querySelectorAll('.accordion-toggle');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const targetTab = button.dataset.tab;
+
+            tabButtons.forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('tab-inactive');
+            });
+            button.classList.add('tab-active');
+            button.classList.remove('tab-inactive');
+
+            contentSections.forEach(section => {
+                if (section.id === targetTab) {
+                    section.classList.remove('hidden');
+                    section.classList.add('visible');
+                } else {
+                    section.classList.remove('visible');
+                    section.classList.add('hidden');
+                }
+            });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    });
+
+    accordionToggles.forEach(toggle => {
+        toggle.addEventListener('click', () => {
+            const content = toggle.nextElementSibling;
+            const icon = toggle.querySelector('.accordion-icon');
+            content.classList.toggle('hidden');
+            if (content.classList.contains('hidden')) {
+                icon.innerHTML = '&#9660;'; // Down arrow
+                toggle.classList.remove('rounded-t-md');
+                if (!toggle.parentElement.nextElementSibling || !toggle.parentElement.nextElementSibling.querySelector('.accordion-toggle')) {
+                    toggle.classList.add('rounded-b-md');
+                }
+            } else {
+                icon.innerHTML = '&#9650;'; // Up arrow
+                toggle.classList.add('rounded-t-md');
+                toggle.classList.remove('rounded-b-md');
+            }
+            // Ensure subsequent accordions are styled correctly
+             accordionToggles.forEach(t => {
+                if (!t.nextElementSibling.classList.contains('hidden')) { // if content is visible
+                    t.classList.add('rounded-t-md');
+                    t.classList.remove('rounded-b-md');
+                } else { // if content is hidden
+                     if (!t.parentElement.nextElementSibling || !t.parentElement.nextElementSibling.querySelector('.accordion-toggle') || t.parentElement.nextElementSibling.querySelector('.accordion-toggle').nextElementSibling.classList.contains('hidden') ) {
+                        // if it's the last item or the next item is closed, it should have bottom rounding if it's closed
+                        if(t.nextElementSibling.classList.contains('hidden')) {
+                           t.classList.add('rounded-b-md');
+                        }
+                    }
+                }
+            });
+        });
+    });
+    
+    // Ensure first accordion button has rounded top by default if content is hidden
+    // and last accordion button has rounded bottom if content is hidden
+    accordionToggles.forEach((toggle, index) => {
+        const content = toggle.nextElementSibling;
+        if (content.classList.contains('hidden')) {
+            if (index === 0 || !accordionToggles[index-1].nextElementSibling.classList.contains('hidden')) {
+                 toggle.classList.add('rounded-t-md');
+            }
+            if (index === accordionToggles.length - 1 || accordionToggles[index+1].nextElementSibling.classList.contains('hidden')) {
+                 toggle.classList.add('rounded-b-md');
+            }
+        } else {
+            toggle.classList.add('rounded-t-md');
+            toggle.classList.remove('rounded-b-md');
+        }
+    });
+
+
+    // Data for the 20 ideas table
+    const applicationIdeasData = [
+        { rank: 1, idea: "PriConFin (Detailed Above)", description: "Decentralized, privacy-preserving orchestration of complex conditional financial instruments.", problems: "DeFi complexity, MEV, lack of privacy for strategies, atomicity issues.", features: "Intents, ARM Atomicity, IFC, Juvix ZKPs, Virtual Apps.", revenue: "Transaction fees, logic deployment fees.", novelty: "High", pmf: "High" },
+        { rank: 2, idea: "SkillNet Anoma (Detailed Above)", description: "Dynamic, privacy-enhanced global skill & task matching network.", problems: "Centralized gig platform fees, lack of privacy, unfair matching.", features: "Intents, IFC, ARM (Agreements/Reputation), Juvix (Matching Logic).", revenue: "Fees on completed work, premium features.", novelty: "High", pmf: "High" },
+        { rank: 3, idea: "Decentralized Private RFQ/Auction Platform", description: "Enables businesses/individuals to request quotes or run auctions for goods/services with shielded bids and identities until selection.", problems: "Price discovery inefficiencies, bid-rigging, lack of privacy in procurement.", features: "Intents, IFC, ARM (Sealed Bids as Resources), Juvix.", revenue: "Fees on successful auctions/deals.", novelty: "High", pmf: "High" },
+        { rank: 4, idea: "PriDECom (Detailed Above)", description: "Decentralized cross-organizational data escrow and computation with privacy.", problems: "Data silos, trust issues in collaboration, privacy risks in joint data analysis.", features: "IFC, Juvix (ZKP/MPC orchestration), ARM (Data/Agreement Resources).", revenue: "Computation fees, logic licensing.", novelty: "High", pmf: "Medium-High" },
+        { rank: 5, idea: "Private, Composable Derivatives Marketplace", description: "Users define and trade bespoke, privacy-preserving derivatives (e.g., options, futures, swaps) with complex underlying logic.", problems: "Limited derivative types in DeFi, counterparty risk, lack of privacy.", features: "Intents, ARM Atomicity, IFC, Juvix (Derivative Logic).", revenue: "Trading fees, clearing fees.", novelty: "High", pmf: "Medium-High" },
+        { rank: 6, idea: "Decentralized Reputation & Attestation System", description: "Users build and manage private, verifiable reputations and attestations that can be selectively disclosed for specific interactions.", problems: "Siloed/non-portable reputation, lack of user control over data.", features: "IFC, ARM (Reputation/Attestation Resources), Juvix.", revenue: "Fees for premium attestations, verification services.", novelty: "Medium", pmf: "Medium-High" },
+        { rank: 7, idea: "Dynamic Multi-Party Barter Network", description: "Facilitates complex, multi-party, multi-asset barter transactions where solvers find chains of compatible needs.", problems: "Illiquidity of certain assets, difficulty in direct multi-item swaps.", features: "Intents, ARM Atomicity, Solvers.", revenue: "Small fee on successful barter chains.", novelty: "High", pmf: "Medium" },
+        { rank: 8, idea: "Privacy-Preserving DeSci Funding & Collaboration", description: "Researchers submit private grant proposals or data-sharing intents; funders/collaborators match based on criteria without full public disclosure.", problems: "Bias in grant funding, IP leakage, difficulty finding collaborators for sensitive research.", features: "Intents, IFC, ARM (Proposal/Data Resources).", revenue: "Platform fees on funded projects, public good.", novelty: "High", pmf: "Medium" },
+        { rank: 9, idea: "Intent-Based Personalized Insurance Platform", description: "Users express insurance needs (e.g., for specific risks, durations); solvers match them with underwriters or risk pools offering tailored products.", problems: "Generic insurance products, high overhead, lack of personalization.", features: "Intents, IFC, ARM (Policy/Claim Resources), Juvix (Risk Logic).", revenue: "Premiums, fees on policy issuance.", novelty: "High", pmf: "Medium" },
+        { rank: 10, idea: "Decentralized Private Social Networking (Advanced)", description: "Beyond simple chat; enables private group formation, content sharing with custom IFC rules, and intent-based content discovery.", problems: "Data exploitation by central platforms, censorship, lack of user control.", features: "IFC, Intents, ARM (Content/Group Resources).", revenue: "Premium features, ethical ads (user-opt-in).", novelty: "Medium", pmf: "Medium" },
+        { rank: 11, idea: "Conditional Will & Inheritance Protocol", description: "Users create complex, conditional wills (e.g., asset distribution based on future events) executed atomically and privately.", problems: "Inflexibility of traditional wills, probate costs, privacy concerns.", features: "Intents, ARM Atomicity, IFC, Juvix (Will Logic).", revenue: "Fees on will creation/execution.", novelty: "High", pmf: "Medium" },
+        { rank: 12, idea: "Community-Governed Local Currency & Barter Systems", description: "Enables local communities to create and manage their own currencies or barter systems with custom rules and privacy.", problems: "Financial exclusion, reliance on national currencies, lack of local economic tools.", features: "Intents, ARM, Juvix, Fractal Scaling.", revenue: "Local transaction fees, community funding.", novelty: "Medium", pmf: "Medium" },
+        { rank: 13, idea: "Verifiable Carbon Credit & Offset Marketplace", description: "A transparent and verifiable marketplace for unique carbon credits/offsets, with private matching of specific offset types to buyer needs.", problems: "Opacity and fraud in carbon markets, difficulty matching specific offset types.", features: "Intents, IFC, ARM (Credit Resources), Juvix (Verification Logic).", revenue: "Trading fees, verification fees.", novelty: "Medium", pmf: "Medium" },
+        { rank: 14, idea: "Decentralized Event Ticketing with Resale Royalties", description: "Private ticket purchasing, verifiable ownership, and programmable resale conditions (e.g., price caps, artist royalties) enforced atomically.", problems: "Ticket scalping, lack of artist control over secondary market, fraud.", features: "Intents, IFC, ARM (Ticket Resources), Juvix.", revenue: "Primary/secondary sale fees, royalty collection.", novelty: "Medium", pmf: "Medium" },
+        { rank: 15, idea: "Adaptive DAO Governance Mechanisms", description: "DAOs can implement complex, private, and conditional voting/proposal systems that adapt based on participation or outcomes.", problems: "Rigid DAO tooling, voter apathy, lack of privacy in governance.", features: "Intents, IFC, ARM (Vote/Proposal Resources), Juvix.", revenue: "DAO treasury funding, public good.", novelty: "High", pmf: "Low-Medium" },
+        { rank: 16, idea: "Privacy-Preserving Supply Chain Traceability & Finance", description: "Companies can privately share select supply chain data for traceability and trigger automated financing based on verified milestones.", problems: "Data silos in supply chains, lack of transparency, inefficient financing.", features: "IFC, Intents, ARM (Shipment/Invoice Resources), Juvix.", revenue: "Fees on financing, data verification services.", novelty: "Medium", pmf: "Low-Medium" },
+        { rank: 17, idea: "Decentralized Content Delivery Network (Private Tiers)", description: "Users can offer/request content delivery with specific privacy/performance tiers, matched by solvers.", problems: "Centralized CDN control, lack of user choice in routing/privacy.", features: "Intents, IFC, ARM (Bandwidth/Storage Resources).", revenue: "Payments for content delivery/access.", novelty: "Medium", pmf: "Low-Medium" },
+        { rank: 18, idea: "Intent-Driven Gaming Asset & Experience Marketplace", description: "Gamers express intents for specific in-game assets, experiences, or collaborations; solvers match these across different games/platforms.", problems: "Fragmented game economies, illiquidity of assets outside specific games.", features: "Intents, IFC, ARM (Game Asset Resources), Interoperability Focus.", revenue: "Transaction fees.", novelty: "Medium", pmf: "Low-Medium" },
+        { rank: 19, idea: "Time-Locked Multi-Sig Data Vaults", description: "Securely store sensitive data with complex, time-locked multi-signature access conditions, programmable via Juvix.", problems: "Secure data storage for long-term needs (e.g., journalistic sources, whistleblower protection).", features: "IFC, ARM (Vault Resources), Juvix (Access Logic).", revenue: "Storage/access fees.", novelty: "Medium", pmf: "Low" },
+        { rank: 20, idea: "Decentralized Prediction Markets with Private Bets", description: "Users can create and participate in prediction markets where individual bets and positions can remain private until market resolution.", problems: "Public exposure of betting strategies, potential for manipulation.", features: "Intents, IFC, ARM (Bet Resources), Juvix.", revenue: "Fees on market creation/settlement.", novelty: "Medium", pmf: "Low" }
+    ];
+
+    const tableBody = document.getElementById('ideasTable').getElementsByTagName('tbody')[0];
+    const ideaSearchInput = document.getElementById('ideaSearch');
+    const pmfFilterSelect = document.getElementById('pmfFilter');
+    let currentSortColumn = 'rank';
+    let currentSortDirection = 'asc';
+
+    function populateTable(data) {
+        tableBody.innerHTML = ''; // Clear existing rows
+        data.forEach(item => {
+            const row = tableBody.insertRow();
+            row.className = 'border-b border-stone-200 hover:bg-stone-50';
+            row.insertCell().textContent = item.rank;
+            row.insertCell().textContent = item.idea;
+            row.insertCell().textContent = item.description;
+            row.insertCell().textContent = item.problems;
+            row.insertCell().textContent = item.features;
+            row.insertCell().textContent = item.revenue;
+            row.insertCell().textContent = item.novelty;
+            row.insertCell().textContent = item.pmf;
+
+            // Style cells
+            Array.from(row.cells).forEach(cell => cell.className = 'px-4 py-2');
+        });
+    }
+
+    function sortData(data, column, direction) {
+        const pmfOrder = { "High": 5, "Medium-High": 4, "Medium": 3, "Low-Medium": 2, "Low": 1 };
+        const noveltyOrder = { "High": 3, "Medium": 2, "Low": 1 };
+
+        data.sort((a, b) => {
+            let valA = a[column];
+            let valB = b[column];
+
+            if (column === 'pmf') {
+                valA = pmfOrder[valA] || 0;
+                valB = pmfOrder[valB] || 0;
+            } else if (column === 'novelty') {
+                valA = noveltyOrder[valA] || 0;
+                valB = noveltyOrder[valB] || 0;
+            } else if (column === 'rank') {
+                valA = parseInt(valA);
+                valB = parseInt(valB);
+            } else if (typeof valA === 'string') {
+                valA = valA.toLowerCase();
+                valB = valB.toLowerCase();
+            }
+
+            if (valA < valB) return direction === 'asc' ? -1 : 1;
+            if (valA > valB) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return data;
+    }
+    
+    function filterData() {
+        const searchTerm = ideaSearchInput.value.toLowerCase();
+        const pmfCategory = pmfFilterSelect.value;
+
+        let filteredData = applicationIdeasData.filter(item => {
+            const matchesSearch = (item.idea.toLowerCase().includes(searchTerm) || item.description.toLowerCase().includes(searchTerm));
+            const matchesPmf = (pmfCategory === "" || item.pmf === pmfCategory);
+            return matchesSearch && matchesPmf;
+        });
+        
+        filteredData = sortData(filteredData, currentSortColumn, currentSortDirection);
+        populateTable(filteredData);
+    }
+
+    document.querySelectorAll('.sortable-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const column = header.dataset.sort;
+            document.querySelectorAll('.sortable-header').forEach(h => {
+                if (h !== header) {
+                    h.classList.remove('asc', 'desc');
+                }
+            });
+
+            if (currentSortColumn === column) {
+                currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                header.classList.toggle('asc');
+                header.classList.toggle('desc');
+            } else {
+                currentSortColumn = column;
+                currentSortDirection = 'asc';
+                header.classList.add('asc');
+                header.classList.remove('desc');
+            }
+            filterData();
+        });
+    });
+
+    ideaSearchInput.addEventListener('input', filterData);
+    pmfFilterSelect.addEventListener('change', filterData);
+
+    // Initial population
+    populateTable(sortData([...applicationIdeasData], 'rank', 'asc'));
+    document.querySelector('.sortable-header[data-sort="rank"]').classList.add('asc');
+
+
+    // PMF Chart
+    const pmfCounts = applicationIdeasData.reduce((acc, item) => {
+        acc[item.pmf] = (acc[item.pmf] || 0) + 1;
+        return acc;
+    }, {});
+
+    const pmfLabels = ["Low", "Low-Medium", "Medium", "Medium-High", "High"]; // Desired order
+    const pmfChartData = pmfLabels.map(label => pmfCounts[label] || 0);
+
+    const ctx = document.getElementById('pmfChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: pmfLabels,
+            datasets: [{
+                label: 'Number of Application Ideas by PMF',
+                data: pmfChartData,
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.6)',  // Low - Red
+                    'rgba(255, 159, 64, 0.6)', // Low-Medium - Orange
+                    'rgba(255, 205, 86, 0.6)', // Medium - Yellow
+                    'rgba(75, 192, 192, 0.6)', // Medium-High - Teal
+                    'rgba(54, 162, 235, 0.6)'  // High - Blue
+                ],
+                borderColor: [
+                    'rgb(255, 99, 132)',
+                    'rgb(255, 159, 64)',
+                    'rgb(255, 205, 86)',
+                    'rgb(75, 192, 192)',
+                    'rgb(54, 162, 235)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    },
+                    title: {
+                        display: true,
+                        text: 'Number of Ideas'
+                    }
+                },
+                x: {
+                     title: {
+                        display: true,
+                        text: 'Estimated Product-Market Fit'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false // Hiding legend as it's a single dataset
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += context.parsed.y + ' ideas';
+                            }
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Juvix code syntax highlighting (basic)
+    document.querySelectorAll('pre.juvix-code code').forEach(block => {
+        let html = block.innerHTML;
+        html = html.replace(/\b(module|import|open|Logic|Logic\.mk|Resource|Resource\.mk|Label\.fromNat|builtinAnomaEncode|Nat\.toString|Nonce\.toRaw|Encoded\.encode|true|false|if|else|then|let|in|type|data|Bool|String|PublicKey|Nonce|ResourceID|Map|List|Maybe)\b/g, '<span class="keyword">$&</span>');
+        html = html.replace(/\b([A-Z][a-zA-Z0-9_]*)\b/g, (match, p1) => {
+             // Avoid re-styling keywords that start with capital letter
+            if (['Logic', 'Resource', 'Label', 'Nat', 'Nonce', 'Encoded', 'Bool', 'String', 'PublicKey', 'ResourceID', 'Map', 'List', 'Maybe'].includes(p1)) {
+                return `<span class="keyword">${p1}</span>`;
+            }
+            return `<span class="type">${p1}</span>`;
+        });
+        html = html.replace(/(\/\/.*)/g, '<span class="comment">$1</span>');
+        html = html.replace(/("[^"]*")/g, '<span class="string">$1</span>');
+        html = html.replace(/(:=|:|@{|}|->|=>|\+\+)/g, '<span class="operator">$1</span>');
+        html = html.replace(/(\(|\)|\[|\]|\{|\}|;|,|\.)/g, '<span class="punctuation">$1</span>');
+        block.innerHTML = html;
+    });
+
+</script>
+</body>
+</html>
